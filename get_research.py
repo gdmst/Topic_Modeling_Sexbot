@@ -3,6 +3,19 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 from pathlib import Path  
 import argparse
+import re
+
+def extract_text(element):
+    text = []
+    for subelement in element:
+        if subelement.tag == 'b':
+            text.append(f"{subelement.text}:")  # Bold text followed by a colon
+        elif subelement.tag == 'i':
+            text.append(f"{subelement.text}")  # Italics
+        else:
+            text.append(subelement.text.strip())  # Normal text
+    return ' '.join(text).replace('  ', ' ')  # Remove extra spaces
+
 
 # Create the argument parser
 parser = argparse.ArgumentParser(description="Process retstart value")
@@ -45,8 +58,8 @@ if response.status_code == 200:
     efetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
     efetch_params = {
         "db": "pubmed",
-        # "id": ','.join(pmids),   # comma-separated list of PMIDs
-        "id": "39391465",
+        "id": ','.join(pmids),   # comma-separated list of PMIDs
+        # "id": "36569790",   # comma-separated list of PMIDs
         "retmode": "xml",        # return format
         "rettype": "abstract",   # return the article abstracts
     }
@@ -62,21 +75,55 @@ if response.status_code == 200:
             title = article.find(".//ArticleTitle").text
             title = title if title is not None else "blank"
             pmid = article.find(".//PMID").text
+            revised_day = article.find(".//DateRevised/Day").text
+            revised_month = article.find(".//DateRevised/Month").text
+            revised_year = article.find(".//DateRevised/Year").text
             # abstract = article.find(".//Abstract/AbstractText")
             # abstract_text = abstract.text if abstract is not None else "blank"
             # abstract_text = abstract_text if abstract_text is not None else "blank"
-            
+
+
+            # Filter articles that contain 'misinformation' in the title or abstract
+            print("PMID:", pmid)
             
             abstract_texts = []
             for abstract in article.findall('.//Abstract/AbstractText'):
-                label = abstract.get('Label')
-                text = abstract.text.strip()
-                abstract_texts.append(text)
+                xml_output = ET.tostring(abstract, encoding='unicode', method='xml')
+                xml_output = xml_output.replace("<b>", "")
+                xml_output = xml_output.replace("</b>", "")
+                xml_output = xml_output.replace("<i>", "")
+                xml_output = xml_output.replace("</i>", "")
+                xml_output = xml_output.replace("<AbstractText>", "")
+                xml_output = xml_output.replace("</AbstractText>", "")
+
+                pattern = r'<AbstractText.*?>'
+                cleaned_text = re.sub(pattern, '', xml_output, flags=re.DOTALL)
+                # print("text ", cleaned_text)
+                # text = abstract.text.strip()
+                abstract_texts.append(cleaned_text)
                 # print(text)
             abstract_text = " ".join(abstract_texts)
+
+            # if abstract_text == "":
+            #     break
+
+            keywords = []
+            for keyword in article.findall('.//KeywordList/Keyword'):
+                text = keyword.text.strip()
+                keywords.append(text)
+                # print(text)
+            keywords_text = ", ".join(keywords)
             
-            # Filter articles that contain 'misinformation' in the title or abstract
-            # print("Title:", title, " PMID:", pmid)
+            authors = []
+            for author in article.findall('.//AuthorList/Author'):
+                first_name = author.find('.//ForeName')
+                first_name_text = "" if first_name is None else first_name.text.strip()
+                last_name = author.find('.//LastName')
+                last_name_text = "" if last_name is None else last_name.text.strip()
+                authors.append(f"{first_name_text} {last_name_text}")
+                # print(text)
+            authors_text = ", ".join(authors)
+            
 
             # if "misinformation" in title.lower() or "misinformation" in abstract_text.lower(): #todo: remove this and use term instead
             # print("Title:", title)
@@ -86,6 +133,11 @@ if response.status_code == 200:
             dict['PMID'] = pmid
             dict['Title'] = title
             dict['Abstract'] = abstract_text
+            dict['Revised_Year'] = revised_year
+            dict['Revised_Month'] = revised_month
+            dict['Revised_Day'] = revised_day
+            dict['Keywords'] = keywords_text
+            dict['Authors'] = authors_text
             list.append(dict)
     else:
         print(f"Error: Unable to fetch article details (status code: {efetch_response.status_code})")
@@ -93,7 +145,7 @@ if response.status_code == 200:
 else:
     print(f"Error: Unable to fetch data (status code: {response.status_code})")
 
-path_name = 'results/misinformation_articles_3.csv'
+path_name = 'results/misinformation_articles_full_4.csv'
 article_df=pd.DataFrame(list)
 filepath = Path(path_name)  
 filepath.parent.mkdir(parents=True, exist_ok=True)  
