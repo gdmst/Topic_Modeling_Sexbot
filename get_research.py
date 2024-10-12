@@ -20,9 +20,10 @@ esearch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 esearch_params = {
     "db": "pubmed",
     "term": "misinformation[Title/Abstract]",  # search term
-    "retmax": "200",          # maximum number of results
+    "retmax": "10",          # maximum number of results
     "retmode": "xml",          # return format
-    "retstart": retstart #400, 1800, 2000, 3400, 4400, 5400, 6800, 7000
+    "sort": "pub_date",
+    "retstart": retstart 
 }
 
 # Send the esearch request
@@ -44,7 +45,8 @@ if response.status_code == 200:
     efetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
     efetch_params = {
         "db": "pubmed",
-        "id": ','.join(pmids),   # comma-separated list of PMIDs
+        # "id": ','.join(pmids),   # comma-separated list of PMIDs
+        "id": "39391465",
         "retmode": "xml",        # return format
         "rettype": "abstract",   # return the article abstracts
     }
@@ -60,9 +62,18 @@ if response.status_code == 200:
             title = article.find(".//ArticleTitle").text
             title = title if title is not None else "blank"
             pmid = article.find(".//PMID").text
-            abstract = article.find(".//Abstract/AbstractText")
-            abstract_text = abstract.text if abstract is not None else "blank"
-            abstract_text = abstract_text if abstract_text is not None else "blank"
+            # abstract = article.find(".//Abstract/AbstractText")
+            # abstract_text = abstract.text if abstract is not None else "blank"
+            # abstract_text = abstract_text if abstract_text is not None else "blank"
+            
+            
+            abstract_texts = []
+            for abstract in article.findall('.//Abstract/AbstractText'):
+                label = abstract.get('Label')
+                text = abstract.text.strip()
+                abstract_texts.append(text)
+                # print(text)
+            abstract_text = " ".join(abstract_texts)
             
             # Filter articles that contain 'misinformation' in the title or abstract
             # print("Title:", title, " PMID:", pmid)
@@ -82,7 +93,7 @@ if response.status_code == 200:
 else:
     print(f"Error: Unable to fetch data (status code: {response.status_code})")
 
-path_name = 'results/misinformation_articles_2.csv'
+path_name = 'results/misinformation_articles_3.csv'
 article_df=pd.DataFrame(list)
 filepath = Path(path_name)  
 filepath.parent.mkdir(parents=True, exist_ok=True)  
